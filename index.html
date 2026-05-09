@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Puzzle</title>
+    <style>
+        :root {
+            --cell: 44px;
+            --font: 1.1rem;
+        }
+        @media (max-width: 480px) {
+            :root { --cell: 36px; --font: 0.9rem; }
+        }
+        @media (max-width: 360px) {
+            :root { --cell: 30px; --font: 0.78rem; }
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #111827;
+            color: #e5e7eb;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 28px 16px 60px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 1.1rem;
+            letter-spacing: 5px;
+            color: #6b7280;
+            margin-bottom: 32px;
+            text-transform: uppercase;
+        }
+
+        /* ── Layout ─────────────────────────────────────── */
+        .game {
+            display: flex;
+            gap: 40px;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        @media (max-width: 700px) {
+            .game { flex-direction: column; align-items: center; gap: 24px; }
+            .hints { order: 2; width: 100%; max-width: 520px; }
+            .crossword-col { order: 1; width: 100%; align-items: center; }
+        }
+
+        /* ── Hints panel ────────────────────────────────── */
+        .hints { width: 260px; flex-shrink: 0; }
+
+        .hint-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            user-select: none;
+        }
+        .hint-item:hover:not(.solved) { background: #1f2937; }
+        .hint-item.active { background: #1e2d4a; border-color: #3b82f6; }
+        .hint-item.solved { background: #0f2318; border-color: #166534; cursor: default; }
+
+        .hint-num {
+            background: #3b82f6;
+            color: white;
+            width: 26px; height: 26px; min-width: 26px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 12px;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .hint-item.active .hint-num { background: #2563eb; }
+        .hint-item.solved .hint-num { background: #16a34a; }
+
+        .hint-body { flex: 1; padding-top: 1px; min-width: 0; }
+        .hint-text { font-size: 13px; line-height: 1.5; color: #d1d5db; }
+        .hint-item.solved .hint-text { color: #86efac; }
+        .hint-len  { font-size: 11px; color: #6b7280; margin-top: 2px; }
+
+        @media (max-width: 700px) {
+            .hints { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+            .hint-item { margin-bottom: 0; }
+        }
+        @media (max-width: 380px) {
+            .hints { grid-template-columns: 1fr; }
+        }
+
+        /* ── Crossword column ───────────────────────────── */
+        .crossword-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        @media (max-width: 700px) {
+            .crossword-col { order: 1; width: 100%; }
+        }
+
+        .grid-wrap { overflow-x: auto; width: 100%; }
+
+        .grid { display: grid; gap: 2px; }
+
+        /* ── Cells ──────────────────────────────────────── */
+        .cell {
+            width: var(--cell); height: var(--cell);
+            display: flex; align-items: center; justify-content: center;
+            font-size: var(--font); font-weight: 700;
+            text-transform: uppercase;
+            border-radius: 4px;
+            transition: background 0.2s, border-color 0.2s, color 0.1s;
+            position: relative;
+        }
+
+        .cell.blank   { background: transparent; }
+        .cell.word    { background: #1f2937; border: 1px solid #374151; color: transparent; cursor: pointer; }
+        .cell.nov     { background: #1e2d4a; border: 2px solid #3b82f6; color: transparent; cursor: pointer; }
+
+        /* Fixed & cell — always visible */
+        .cell.fixed   {
+            background: #1f2937; border: 1px solid #374151;
+            color: #6b7280; font-size: 0.85em;
+            cursor: pointer;
+        }
+
+        /* Active row tint */
+        .cell.word.ar { border-color: #4b6a9b; background: #1a253d; }
+        .cell.nov.ar  { border-color: #60a5fa; background: #1a2d50; }
+        .cell.fixed.ar{ border-color: #4b6a9b; background: #1a253d; color: #9ca3af; }
+
+        /* Typing */
+        .cell.typing      { color: #e5e7eb; }
+        .cell.nov.typing  { color: #93c5fd; }
+
+        /* Cursor blink */
+        .cell.cursor::after {
+            content: '';
+            position: absolute;
+            left: 50%; top: 22%;
+            transform: translateX(-50%);
+            width: 2px; height: 56%;
+            background: #60a5fa;
+            border-radius: 1px;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+        /* Solved */
+        .cell.word-done  { background: #1f2937; border: 1px solid #374151; color: #9ca3af; cursor: default; }
+        .cell.fixed-done { background: #1f2937; border: 1px solid #374151; color: #6b7280; font-size: 0.85em; cursor: default; }
+        .cell.nov-done   {
+            background: #14532d; border: 2px solid #22c55e; color: #86efac;
+            animation: popIn 0.4s; cursor: default;
+        }
+
+        /* Wrong-answer shake */
+        .cell.shake { animation: shk 0.35s; }
+        @keyframes shk {
+            0%,100%{transform:translateX(0)}
+            20%{transform:translateX(-6px)} 40%{transform:translateX(6px)}
+            60%{transform:translateX(-6px)} 80%{transform:translateX(6px)}
+        }
+
+        @keyframes popIn {
+            0%  {transform:scale(0.3);opacity:0}
+            65% {transform:scale(1.25)}
+            100%{transform:scale(1);opacity:1}
+        }
+
+        /* ── Controls ───────────────────────────────────── */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .clue-bar {
+            font-size: 13px;
+            color: #93c5fd;
+            text-align: center;
+            padding: 0 6px;
+            min-height: 18px;
+        }
+
+        .lock-btn {
+            width: 100%; max-width: 280px;
+            padding: 12px;
+            background: #3b82f6;
+            color: white; border: none;
+            border-radius: 10px;
+            font-size: 1rem; font-weight: 700;
+            cursor: pointer; letter-spacing: 1px;
+            transition: background 0.15s, transform 0.1s;
+        }
+        .lock-btn:hover  { background: #2563eb; }
+        .lock-btn:active { transform: scale(0.97); background: #1d4ed8; }
+
+        /* ── Off-screen keyboard capture (mobile) ───────── */
+        #kbd {
+            position: fixed;
+            bottom: 0; left: 0;
+            width: 1px; height: 1px;
+            opacity: 0;
+            font-size: 16px;
+        }
+
+        /* ── Victory overlay ────────────────────────────── */
+        .overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.92);
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 32px; z-index: 999; padding: 24px;
+        }
+        .overlay.show { display: flex; }
+
+        .good-job {
+            font-size: clamp(1.4rem, 5vw, 2.8rem);
+            font-weight: 900; color: #4ade80;
+            text-shadow: 0 0 40px rgba(74,222,128,0.6);
+            letter-spacing: 2px;
+            animation: popIn 0.5s;
+            text-align: center;
+        }
+
+        .sonogram {
+            max-width: min(85vw, 500px);
+            max-height: 55vh;
+            border-radius: 16px;
+            border: 4px solid #4ade80;
+            box-shadow: 0 0 60px rgba(74,222,128,0.3);
+            opacity: 0;
+            transition: opacity 0.8s 0.4s;
+        }
+        .sonogram.visible { opacity: 1; }
+    </style>
+</head>
+<body>
+
+<h1>Find the hidden word</h1>
+
+<div class="game">
+    <div class="hints" id="hints"></div>
+
+    <div class="crossword-col" id="crosswordCol">
+        <div class="grid-wrap">
+            <div class="grid" id="grid"></div>
+        </div>
+        <div class="controls">
+            <div class="clue-bar" id="clueBar"></div>
+            <button id="lockBtn" class="lock-btn">LOCK IN</button>
+        </div>
+    </div>
+</div>
+
+<input id="kbd" type="text"
+       autocomplete="off" autocorrect="off"
+       autocapitalize="characters" spellcheck="false" />
+
+<div class="overlay" id="overlay">
+    <div class="good-job">Eitthvað er að fara gerast 1. Nóvember!!!</div>
+    <img id="sonogram" class="sonogram" src="20260501_190549.jpg" alt="" />
+</div>
+
+<script>
+    // ── Puzzle data ───────────────────────────────────────────────────────────
+    // word : answer in uppercase; use '&' for a fixed visible separator the user doesn't type
+    // key  : 0-based index in `word` (including any '&') of the Nóvember letter
+    // hint : clue text
+
+    const NOV_COL   = 3;
+    const TOTAL_COL = 14;
+    const NOVEMBER  = ['N','Ó','V','E','M','B','E','R'];
+
+    const PUZZLE = [
+        { word: 'JÓNSI&SNORRI', key: 2, hint: 'Alltaf seinir'         },
+        { word: 'NÓTT',         key: 1, hint: 'Sylvía'                 },
+        { word: 'VICTOR',       key: 0, hint: 'Doctor Doom first name' },
+        { word: 'ELEKTRA',      key: 0, hint: 'Jennifer Garner (2005)' },
+        { word: 'SAMWISE',      key: 2, hint: 'Frodo &'               },
+        { word: 'BRUCE',        key: 0, hint: 'Hulk & Batman'          },
+        { word: 'EYBJÖRG',      key: 0, hint: 'Bylgja millinafn'       },
+        { word: 'ROAD',         key: 0, hint: 'The longest ____'       },
+    ];
+
+    // Number of letters the user must actually type (excludes '&')
+    function typeLen(word) {
+        return [...word].filter(c => c !== '&').length;
+    }
+
+    // Label for the hints panel — shows "5 + 6 letters" for two-part words
+    function lenLabel(word) {
+        if (!word.includes('&')) return `${word.length} letters`;
+        return word.split('&').map(p => p.length).join(' + ') + ' letters';
+    }
+
+    // ── Build grid ────────────────────────────────────────────────────────────
+    const gridEl = document.getElementById('grid');
+    gridEl.style.gridTemplateColumns = `repeat(${TOTAL_COL}, var(--cell))`;
+    gridEl.style.gridTemplateRows    = `repeat(${PUZZLE.length}, var(--cell))`;
+
+    const cellGrid = [];
+
+    PUZZLE.forEach((entry, row) => {
+        const { word, key } = entry;
+        const startCol = NOV_COL - key;
+        const rowCells = [];
+
+        for (let col = 0; col < TOTAL_COL; col++) {
+            const div     = document.createElement('div');
+            const charIdx = col - startCol;
+            const inWord  = charIdx >= 0 && charIdx < word.length;
+
+            if (!inWord) {
+                div.className = 'cell blank';
+            } else {
+                const ch = word[charIdx];
+                if (ch === '&') {
+                    div.className = 'cell fixed';
+                    div.textContent = '&';
+                } else if (col === NOV_COL) {
+                    div.className = 'cell nov';
+                } else {
+                    div.className = 'cell word';
+                }
+                // clicking any cell in a row activates that row
+                div.addEventListener('click', () => { if (!solved[row]) activate(row); });
+            }
+
+            gridEl.appendChild(div);
+            rowCells.push(div);
+        }
+
+        cellGrid.push(rowCells);
+    });
+
+    // ── Build hints ───────────────────────────────────────────────────────────
+    const hintsEl = document.getElementById('hints');
+
+    PUZZLE.forEach((entry, i) => {
+        const item = document.createElement('div');
+        item.className = 'hint-item';
+        item.id = `h${i}`;
+        item.innerHTML = `
+            <div class="hint-num">${i + 1}</div>
+            <div class="hint-body">
+                <div class="hint-text">${entry.hint}</div>
+                <div class="hint-len">${lenLabel(entry.word)}</div>
+            </div>`;
+        item.addEventListener('click', () => { if (!solved[i]) activate(i); });
+        hintsEl.appendChild(item);
+    });
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    const solved = new Array(PUZZLE.length).fill(false);
+    let   active = 0;
+    let   typed  = '';
+
+    // Sync `typed` into the active row's cells, skipping '&' positions
+    function redraw(row) {
+        if (solved[row]) return;
+        const { word, key } = PUZZLE[row];
+        const startCol = NOV_COL - key;
+        let ti = 0; // index into `typed` (letters only)
+
+        for (let i = 0; i < word.length; i++) {
+            if (word[i] === '&') continue; // fixed cell, never touched
+            const cell = cellGrid[row][startCol + i];
+            cell.classList.remove('typing', 'cursor');
+            cell.textContent = '';
+
+            if (ti < typed.length) {
+                cell.textContent = typed[ti];
+                cell.classList.add('typing');
+            } else if (ti === typed.length) {
+                cell.classList.add('cursor');
+            }
+            ti++;
+        }
+    }
+
+    function activate(row) {
+        // Clean all unsolved rows
+        cellGrid.forEach((cells, r) => {
+            if (solved[r]) return;
+            const { word, key } = PUZZLE[r];
+            const sc = NOV_COL - key;
+            for (let i = 0; i < word.length; i++) {
+                const c = cells[sc + i];
+                c.classList.remove('ar', 'typing', 'cursor');
+                if (word[i] !== '&') c.textContent = '';
+            }
+        });
+        document.querySelectorAll('.hint-item').forEach(h => h.classList.remove('active'));
+
+        active = row;
+        typed  = '';
+
+        // Highlight new row (including & cell)
+        const { word, key } = PUZZLE[row];
+        const sc = NOV_COL - key;
+        for (let i = 0; i < word.length; i++) {
+            cellGrid[row][sc + i].classList.add('ar');
+        }
+
+        document.getElementById(`h${row}`).classList.add('active');
+        document.getElementById('clueBar').textContent =
+            `${row + 1}. ${PUZZLE[row].hint}  —  ${lenLabel(word)}`;
+
+        redraw(row);
+        kbd.value = '';
+        kbd.focus();
+    }
+
+    // ── Input handling ────────────────────────────────────────────────────────
+    const kbd      = document.getElementById('kbd');
+    const overlay  = document.getElementById('overlay');
+    const sonogram = document.getElementById('sonogram');
+
+    // Strip accents and non-letter chars for comparison
+    function normalize(s) {
+        return s.toUpperCase()
+                .normalize('NFD')
+                .replace(/[̀-ͯ]/g, '')
+                .replace(/[^A-Z]/g, '');
+    }
+
+    // Desktop: global keydown — works without clicking first
+    document.addEventListener('keydown', e => {
+        if (solved[active]) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+            return;
+        }
+        if (e.key === 'Backspace') {
+            e.preventDefault();
+            typed = typed.slice(0, -1);
+            kbd.value = typed;
+            redraw(active);
+            return;
+        }
+        if (e.key.length === 1 && /\p{L}/u.test(e.key)) {
+            e.preventDefault();
+            if (typed.length < typeLen(PUZZLE[active].word)) {
+                typed += e.key.toUpperCase();
+                kbd.value = typed;
+                redraw(active);
+            }
+        }
+    });
+
+    // Mobile: virtual keyboard via hidden input
+    kbd.addEventListener('input', () => {
+        if (solved[active]) return;
+        const max = typeLen(PUZZLE[active].word);
+        const raw = kbd.value.toUpperCase().replace(/[^\p{L}]/gu, '');
+        typed = raw.slice(0, max);
+        kbd.value = typed;
+        redraw(active);
+    });
+
+    // Tap anywhere on crossword to bring up mobile keyboard
+    document.getElementById('crosswordCol').addEventListener('click', () => kbd.focus());
+
+    document.getElementById('lockBtn').addEventListener('click', () => {
+        kbd.focus();
+        submit();
+    });
+
+    function submit() {
+        if (solved[active] || !typed) return;
+        const entry = PUZZLE[active];
+
+        if (normalize(typed) !== normalize(entry.word)) {
+            // Wrong — shake the row cells
+            const sc = NOV_COL - entry.key;
+            for (let i = 0; i < entry.word.length; i++) {
+                if (entry.word[i] === '&') continue;
+                const c = cellGrid[active][sc + i];
+                c.classList.remove('shake');
+                void c.offsetWidth;
+                c.classList.add('shake');
+                setTimeout(() => c.classList.remove('shake'), 400);
+            }
+            typed = '';
+            kbd.value = '';
+            redraw(active);
+            return;
+        }
+
+        // Correct — reveal all cells in the row
+        const sc = NOV_COL - entry.key;
+        cellGrid[active].forEach((cell, col) => {
+            const ci = col - sc;
+            if (ci < 0 || ci >= entry.word.length) return;
+            const ch = entry.word[ci];
+
+            if (col === NOV_COL) {
+                cell.className = 'cell nov-done';
+                cell.textContent = NOVEMBER[active];
+            } else if (ch === '&') {
+                cell.className = 'cell fixed-done';
+                // textContent already '&'
+            } else {
+                cell.className = 'cell word-done';
+                cell.textContent = ch;
+            }
+        });
+
+        solved[active] = true;
+        document.getElementById(`h${active}`).classList.remove('active');
+        document.getElementById(`h${active}`).classList.add('solved');
+
+        if (solved.every(Boolean)) {
+            setTimeout(() => {
+                overlay.classList.add('show');
+                setTimeout(() => sonogram.classList.add('visible'), 300);
+            }, 500);
+            return;
+        }
+
+        // Advance to next unsolved
+        let next = -1;
+        for (let i = active + 1; i < PUZZLE.length; i++) if (!solved[i]) { next = i; break; }
+        if (next === -1) for (let i = 0; i < active; i++)  if (!solved[i]) { next = i; break; }
+        if (next !== -1) activate(next);
+    }
+
+    activate(0);
+</script>
+
+</body>
+</html>
