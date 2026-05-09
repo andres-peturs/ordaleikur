@@ -86,6 +86,29 @@
         .hint-item.solved .hint-text { color: #86efac; }
         .hint-len  { font-size: 11px; color: #6b7280; margin-top: 2px; }
 
+        .extra-btn {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 2px 8px;
+            background: transparent;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            color: #6b7280;
+            font-size: 11px;
+            cursor: pointer;
+            transition: border-color 0.2s, color 0.2s;
+        }
+        .extra-btn:hover { border-color: #9ca3af; color: #d1d5db; }
+
+        .extra-reveal {
+            display: none;
+            font-size: 12px;
+            color: #fbbf24;
+            margin-top: 5px;
+            font-style: italic;
+        }
+        .extra-reveal.show { display: block; }
+
         @media (max-width: 700px) {
             .hints { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
             .hint-item { margin-bottom: 0; }
@@ -292,7 +315,7 @@
         { word: 'SAMWISE',      key: 2, hint: 'Frodo &'               },
         { word: 'BRUCE',        key: 0, hint: 'Hulk & Batman'          },
         { word: 'EYBJÖRG',      key: 0, hint: 'Bylgja millinafn'       },
-        { word: 'ROAD',         key: 0, hint: 'The longest ____'       },
+        { word: 'ROAD',         key: 0, hint: 'The longest ____',  extraHint: 'Settlers of Catan' },
     ];
 
     // Number of letters the user must actually type (excludes '&')
@@ -359,6 +382,22 @@
                 <div class="hint-text">${entry.hint}</div>
                 <div class="hint-len">${lenLabel(entry.word)}</div>
             </div>`;
+        if (entry.extraHint) {
+            const btn = document.createElement('button');
+            btn.className = 'extra-btn';
+            btn.textContent = 'Extra hint?';
+            const reveal = document.createElement('div');
+            reveal.className = 'extra-reveal';
+            reveal.textContent = entry.extraHint;
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                btn.style.display = 'none';
+                reveal.classList.add('show');
+            });
+            item.querySelector('.hint-body').appendChild(btn);
+            item.querySelector('.hint-body').appendChild(reveal);
+        }
+
         item.addEventListener('click', () => { if (!solved[i]) activate(i); });
         hintsEl.appendChild(item);
     });
