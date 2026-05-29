@@ -468,7 +468,6 @@
     const overlay  = document.getElementById('overlay');
     const sonogram = document.getElementById('sonogram');
 
-    // Strip accents and non-letter chars for comparison
     function normalize(s) {
         return s.toUpperCase()
                 .normalize('NFD')
@@ -476,20 +475,26 @@
                 .replace(/[^A-Z]/g, '');
     }
 
-    // Desktop: global keydown — works without clicking first
+    // Always move cursor to end after setting kbd value —
+    // without this, mobile browsers reset the cursor to 0 and
+    // the next character gets inserted at the start (backwards bug).
+    function setKbd(val) {
+        kbd.value = val;
+        try { kbd.setSelectionRange(val.length, val.length); } catch (_) {}
+    }
+
+    // Desktop path: fires when kbd does NOT have focus (before first tap).
+    // Once kbd is focused the input event below takes over.
     document.addEventListener('keydown', e => {
         if (solved[active]) return;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key === 'Enter') { e.preventDefault(); submit(); return; }
+        if (document.activeElement === kbd) return; // let input event handle it
 
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            submit();
-            return;
-        }
         if (e.key === 'Backspace') {
             e.preventDefault();
             typed = typed.slice(0, -1);
-            kbd.value = typed;
+            setKbd(typed);
             redraw(active);
             return;
         }
@@ -497,19 +502,25 @@
             e.preventDefault();
             if (typed.length < typeLen(PUZZLE[active].word)) {
                 typed += e.key.toUpperCase();
-                kbd.value = typed;
+                setKbd(typed);
                 redraw(active);
             }
         }
     });
 
-    // Mobile: virtual keyboard via hidden input
+    // Enter when kbd itself is focused (mobile)
+    kbd.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+    });
+
+    // Mobile + desktop-with-focus path: read from the input element directly.
+    // This is the only path that runs on mobile virtual keyboards.
     kbd.addEventListener('input', () => {
         if (solved[active]) return;
         const max = typeLen(PUZZLE[active].word);
-        const raw = kbd.value.toUpperCase().replace(/[^\p{L}]/gu, '');
-        typed = raw.slice(0, max);
-        kbd.value = typed;
+        const raw = kbd.value.toUpperCase().replace(/[^\p{L}]/gu, '').slice(0, max);
+        typed = raw;
+        setKbd(typed); // normalize value and keep cursor at end
         redraw(active);
     });
 
